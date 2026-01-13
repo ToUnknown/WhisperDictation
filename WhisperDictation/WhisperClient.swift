@@ -170,7 +170,22 @@ final class WhisperClient {
     // MARK: - Private Methods
     
     /// Отримує поточну мову клавіатури з системи
+    /// TIS* APIs are not thread-safe and must be called on the main thread
     private func getCurrentKeyboardLanguage() -> String {
+        // TIS* APIs must be called on the main thread
+        if Thread.isMainThread {
+            return fetchKeyboardLanguageUnsafe()
+        } else {
+            var result = "en"
+            DispatchQueue.main.sync {
+                result = fetchKeyboardLanguageUnsafe()
+            }
+            return result
+        }
+    }
+    
+    /// Internal method that actually calls TIS* APIs - must only be called on main thread
+    private func fetchKeyboardLanguageUnsafe() -> String {
         guard let inputSource = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
             print("[WhisperClient] Could not get keyboard input source, defaulting to 'en'")
             return "en"

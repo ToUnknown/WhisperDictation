@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 final class TranscriptionHistoryStore: ObservableObject {
     struct Item: Identifiable, Codable, Equatable {
