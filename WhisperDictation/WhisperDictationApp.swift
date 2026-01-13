@@ -6,12 +6,14 @@
 //
 
 import SwiftUI
+import AppKit
 
 @main
 struct WhisperDictationApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var apiKeyStore = APIKeyStore.shared
     @StateObject private var microphoneManager = MicrophoneManager.shared
+    @StateObject private var historyStore = TranscriptionHistoryStore.shared
     
     var body: some Scene {
         // Меню-бар
@@ -51,6 +53,11 @@ struct WhisperDictationApp: App {
             
             // Інструкція
             instructionSection
+            
+            Divider()
+            
+            // Історія
+            historySection
             
             Divider()
             
@@ -105,6 +112,29 @@ struct WhisperDictationApp: App {
         .foregroundColor(.secondary)
     }
     
+    // MARK: - History Section
+    
+    private var historySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("History")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .padding(.horizontal, 8)
+            
+            if historyStore.items.isEmpty {
+                Text("No transcriptions yet")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+            } else {
+                ForEach(historyStore.items) { item in
+                    HistoryRowView(item: item)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+    
     // MARK: - Microphone Section
     
     private var microphoneSection: some View {
@@ -146,5 +176,37 @@ struct WhisperDictationApp: App {
             return device.name
         }
         return "Select Microphone"
+    }
+}
+
+private struct HistoryRowView: View {
+    let item: TranscriptionHistoryStore.Item
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(item.text)
+                .font(.caption)
+                .lineLimit(isHovered ? 5 : 1)
+                .truncationMode(.tail)
+                .animation(.easeInOut(duration: 0.2), value: isHovered)
+            
+            Spacer(minLength: 8)
+            
+            Button("Copy") {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(item.text, forType: .string)
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+            .opacity(isHovered ? 1 : 0)
+            .animation(.easeInOut(duration: 0.2), value: isHovered)
+        }
+        .padding(.horizontal, 8)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 }
