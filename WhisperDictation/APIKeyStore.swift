@@ -3,7 +3,7 @@
 //  WhisperDictation
 //
 //  Сервіс для зберігання API ключа OpenAI.
-//  Поточна реалізація використовує UserDefaults, але легко замінюється на Keychain.
+//  Поточна реалізація використовує Keychain.
 //
 
 import Foundation
@@ -29,21 +29,24 @@ final class APIKeyStore: APIKeyStoring, ObservableObject {
     }
     
     private let storageKey = "OpenAI_API_Key"
+    private let keychainService = "com.whisperdictation.apiKey"
+    private lazy var keychainStore = KeychainStore(service: keychainService)
     
     private init() {
+        migrateUserDefaultsIfNeeded()
         self.apiKey = load()
     }
     
     func save(key: String?) {
         if let key = key, !key.isEmpty {
-            UserDefaults.standard.set(key, forKey: storageKey)
+            keychainStore.save(key, account: storageKey)
         } else {
-            UserDefaults.standard.removeObject(forKey: storageKey)
+            keychainStore.delete(account: storageKey)
         }
     }
     
     func load() -> String? {
-        UserDefaults.standard.string(forKey: storageKey)
+        keychainStore.read(account: storageKey)
     }
     
     var hasValidKey: Bool {
@@ -57,5 +60,11 @@ final class APIKeyStore: APIKeyStoring, ObservableObject {
         let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedKey.hasPrefix("sk-") && trimmedKey.count > 10
     }
+    
+    private func migrateUserDefaultsIfNeeded() {
+        guard keychainStore.read(account: storageKey) == nil else { return }
+        guard let legacyKey = UserDefaults.standard.string(forKey: storageKey) else { return }
+        save(key: legacyKey)
+        UserDefaults.standard.removeObject(forKey: storageKey)
+    }
 }
-
