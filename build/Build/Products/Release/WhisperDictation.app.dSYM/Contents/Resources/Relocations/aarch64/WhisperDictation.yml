@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/build/Build/Products/Release/WhisperDictation.app/Contents/MacOS/WhisperDictation'
+relocations:     []
+...

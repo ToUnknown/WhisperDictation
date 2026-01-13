@@ -1,0 +1,96 @@
+{
+  "source": "/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/WhisperDictation/SettingsView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Enter your OpenAI API key to enable voice transcription. You can get one at platform.openai.com",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 29
+        }
+      },
+      {
+        "comment": "",
+        "key": "OpenAI API Key",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 24
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hide key",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 52
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show key",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 52
+        }
+      },
+      {
+        "comment": "",
+        "key": "sk-...",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 38
+        }
+      },
+      {
+        "comment": "",
+        "key": "sk-...",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 40
+        }
+      },
+      {
+        "comment": "",
+        "key": "Clear",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 70
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 77
+        }
+      },
+      {
+        "comment": "",
+        "key": "Saved!",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 61
+        }
+      },
+      {
+        "comment": "",
+        "key": "API key is configured",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 90
+        }
+      },
+      {
+        "comment": "",
+        "key": "API key not set",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 99
+        }
+      }
+    ]
+  },
+  "version": 1
+}

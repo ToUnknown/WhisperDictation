@@ -1,0 +1,12 @@
+{
+  "/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/WhisperDictation/APIKeyStore.swift" : {
+    "abi-baseline-json" : "/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/build/Build/Intermediates.noindex/WhisperDictation.build/Release/WhisperDictation.build/Objects-normal/arm64/WhisperDictation.abi.json",
+    "const-values" : "/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/build/Build/Intermediates.noindex/WhisperDictation.build/Release/WhisperDictation.build/Objects-normal/arm64/WhisperDictation-primary.swiftconstvalues",
+    "dependencies" : "/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/build/Build/Intermediates.noindex/WhisperDictation.build/Release/WhisperDictation.build/Objects-normal/arm64/WhisperDictation-primary.d",
+    "diagnostics" : "/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/build/Build/Intermediates.noindex/WhisperDictation.build/Release/WhisperDictation.build/Objects-normal/arm64/WhisperDictation-primary.dia",
+    "objc-header" : "/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/build/Build/Intermediates.noindex/WhisperDictation.build/Release/WhisperDictation.build/Objects-normal/arm64/WhisperDictation-Swift.h",
+    "swiftdoc" : "/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/build/Build/Intermediates.noindex/WhisperDictation.build/Release/WhisperDictation.build/Objects-normal/arm64/WhisperDictation.swiftdoc",
+    "swiftmodule" : "/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/build/Build/Intermediates.noindex/WhisperDictation.build/Release/WhisperDictation.build/Objects-normal/arm64/WhisperDictation.swiftmodule",
+    "swiftsourceinfo" : "/Users/maksimgajduk/Storage/Development/Tools/WhisperDictation/build/Build/Intermediates.noindex/WhisperDictation.build/Release/WhisperDictation.build/Objects-normal/arm64/WhisperDictation.swiftsourceinfo"
+  }
+}
