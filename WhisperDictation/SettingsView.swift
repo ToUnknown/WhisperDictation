@@ -138,27 +138,38 @@ private struct WindowAccessor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
-            configureWindow(for: view)
+            configureWindow(for: view, coordinator: context.coordinator)
         }
         return view
     }
     
     func updateNSView(_ nsView: NSView, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
     
-    private func configureWindow(for view: NSView) {
+    private func configureWindow(for view: NSView, coordinator: Coordinator) {
         guard let window = view.window else { return }
         
         // Set window to float above all other windows
         window.level = .floating
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        window.delegate = coordinator
         
         // Activate the app and bring window to front
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(.accessory)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         
         // Center the window on screen
         window.center()
+    }
+
+    final class Coordinator: NSObject, NSWindowDelegate {
+        func windowWillClose(_ notification: Notification) {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 }
 
