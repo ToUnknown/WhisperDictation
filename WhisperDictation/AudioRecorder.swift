@@ -372,6 +372,7 @@ final class AudioRecorder {
                 case .success(let text):
                     print("[AudioRecorder] Transcription: \(text)")
                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        TranscriptionHistoryStore.shared.add(text: text)
                         TextInjector.shared.insert(text: text)
                     } else {
                         print("[AudioRecorder] Empty transcription, skipping insert")
