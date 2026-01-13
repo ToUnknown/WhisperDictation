@@ -14,6 +14,9 @@ final class OverlayWindow: NSWindow {
     private let windowWidth: CGFloat = 200
     private let windowHeight: CGFloat = 100
     
+    /// Лічильник для відміни відкладеного hide
+    private var showCounter: Int = 0
+    
     private init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
@@ -79,6 +82,9 @@ final class OverlayWindow: NSWindow {
             return
         }
         
+        // Збільшуємо лічильник щоб відмінити відкладений hide
+        showCounter += 1
+        
         positionWindow()
         alphaValue = 1
         orderFrontRegardless()
@@ -91,9 +97,26 @@ final class OverlayWindow: NSWindow {
             return
         }
         
-        // Даємо час для анімації вильоту
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            self.orderOut(nil)
+        // Запам'ятовуємо поточний лічильник
+        let counterAtHide = showCounter
+        
+        // Даємо час для анімації вильоту (але відміняємо якщо show() був викликаний)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self = self else { return }
+            // Якщо show() був викликаний після hide() - не ховаємо
+            if self.showCounter == counterAtHide {
+                self.orderOut(nil)
+            }
         }
+    }
+    
+    /// Приховує вікно негайно без затримки
+    func hideImmediately() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { self.hideImmediately() }
+            return
+        }
+        
+        orderOut(nil)
     }
 }

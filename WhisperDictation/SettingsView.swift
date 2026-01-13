@@ -26,33 +26,48 @@ struct SettingsView: View {
             }
             
             // Опис
-            Text("Enter your OpenAI API key to enable voice transcription. You can get one at platform.openai.com")
+            Text("Copy your OpenAI API key and click the button below to paste it. You can get one at platform.openai.com")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             
-            // Поле вводу
-            HStack {
-                Group {
-                    if viewModel.showKey {
-                        TextField("sk-...", text: $viewModel.tempKey)
-                    } else {
-                        SecureField("sk-...", text: $viewModel.tempKey)
-                    }
-                }
-                .textFieldStyle(.roundedBorder)
-                
-                Button {
-                    viewModel.showKey.toggle()
-                } label: {
-                    Image(systemName: viewModel.showKey ? "eye.slash" : "eye")
+            // Current key display
+            if viewModel.hasStoredKey {
+                HStack {
+                    Text(viewModel.maskedKey)
+                        .font(.system(.body, design: .monospaced))
                         .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Button {
+                        viewModel.clearKey()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove API key")
                 }
-                .buttonStyle(.borderless)
-                .help(viewModel.showKey ? "Hide key" : "Show key")
+                .padding(10)
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(8)
             }
             
-            // Кнопки
+            // Paste button
+            Button {
+                viewModel.pasteKeyFromClipboard()
+            } label: {
+                HStack {
+                    Image(systemName: "doc.on.clipboard")
+                    Text(viewModel.hasStoredKey ? "Paste New Key from Clipboard" : "Paste Key from Clipboard")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            
+            // Status
             HStack {
                 if viewModel.showSavedMessage {
                     HStack(spacing: 4) {
@@ -67,42 +82,61 @@ struct SettingsView: View {
                 
                 Spacer()
                 
-                Button("Clear") {
-                    viewModel.clearKey()
-                }
-                .disabled(viewModel.tempKey.isEmpty && !viewModel.hasStoredKey)
-                
-                Button("Save") {
-                    viewModel.saveKey()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.tempKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            
-            // Статус
-            if viewModel.hasValidKey {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(.green)
-                        .frame(width: 8, height: 8)
-                    Text("API key is configured")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(.orange)
-                        .frame(width: 8, height: 8)
-                    Text("API key not set")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                if viewModel.hasValidKey {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(.green)
+                            .frame(width: 8, height: 8)
+                        Text("API key is configured")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 8, height: 8)
+                        Text("API key not set")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
         }
         .padding(20)
         .frame(width: 340)
         .animation(.easeInOut(duration: 0.2), value: viewModel.showSavedMessage)
+        .background(WindowAccessor())
+    }
+}
+
+// MARK: - Window Accessor
+
+private struct WindowAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            configureWindow(for: view)
+        }
+        return view
+    }
+    
+    func updateNSView(_ nsView: NSView, context: Context) {}
+    
+    private func configureWindow(for view: NSView) {
+        guard let window = view.window else { return }
+        
+        // Set window to float above all other windows
+        window.level = .floating
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        
+        // Activate the app and bring window to front
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        
+        // Center the window on screen
+        window.center()
     }
 }
 

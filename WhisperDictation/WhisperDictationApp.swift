@@ -18,7 +18,7 @@ struct WhisperDictationApp: App {
         } label: {
             menuBarIcon
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
         
         // Вікно налаштувань
         Settings {

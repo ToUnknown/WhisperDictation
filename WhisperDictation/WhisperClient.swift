@@ -72,6 +72,10 @@ final class WhisperClient {
         // Поле language - мова з клавіатури
         body.appendFormField(named: "language", value: whisperLanguage, boundary: boundary)
         
+        // Prompt для точної транскрипції без пропусків
+        let prompt = "Transcribe the audio exactly as spoken, word for word. Include every sentence, phrase, and word without omitting, summarizing, or paraphrasing anything. Preserve all repetitions, filler words, and pauses."
+        body.appendFormField(named: "prompt", value: prompt, boundary: boundary)
+        
         // Поле file
         let fileName = url.lastPathComponent
         let mimeType = getMimeType(for: url)

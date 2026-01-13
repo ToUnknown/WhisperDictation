@@ -9,6 +9,7 @@ import SwiftUI
 
 struct OverlayView: View {
     @StateObject private var viewModel: OverlayViewModel
+    @ObservedObject private var uiState = DictationUIState.shared
 
     init(viewModel: OverlayViewModel = OverlayViewModel()) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -24,16 +25,17 @@ struct OverlayView: View {
     private let barSpacing: CGFloat = 4
     
     // Стан для анімацій
-    @State private var isVisible = false      // Контролює наявність view в ієрархії
-    @State private var isShowing = false      // Контролює анімацію появи (scale/opacity)
     @State private var isExpanded = false
     @State private var barsAppeared = false
     @State private var processingOffset: CGFloat = 0
     @State private var exitOffset: CGFloat = 0
     
+    // Поріг для показу розширеного UI (0.7 = 70% від 0.7с = ~0.5с)
+    private let expandThreshold: CGFloat = 0.72
+    
     var body: some View {
         ZStack {
-            if isVisible {
+            if uiState.overlayProgress > 0 || viewModel.phase == .transcribing {
                 mainView
                     .offset(y: exitOffset)
             }
@@ -43,12 +45,20 @@ struct OverlayView: View {
         .onChange(of: viewModel.phase) { oldValue, newValue in
             handlePhaseChange(from: oldValue, to: newValue)
         }
+        .onChange(of: uiState.overlayProgress) { oldValue, newValue in
+            handleProgressChange(newValue)
+        }
     }
     
     // MARK: - Main View
     
     private var mainView: some View {
-        ZStack {
+        // Використовуємо overlayProgress для плавного масштабування
+        let progress = uiState.overlayProgress
+        let scale = 0.3 + (progress * 0.7) // Від 0.3 до 1.0
+        let opacity = progress
+        
+        return ZStack {
             // Фон - чорний прямокутник/лінія
             RoundedRectangle(cornerRadius: isExpanded ? cornerRadius : lineHeight / 2)
                 .fill(Color.black)
@@ -68,9 +78,8 @@ struct OverlayView: View {
                 processingLayer
             }
         }
-        .scaleEffect(isShowing ? 1 : 0.5)
-        .opacity(isShowing ? 1 : 0)
-        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isShowing)
+        .scaleEffect(viewModel.phase == .transcribing ? 1 : scale)
+        .opacity(viewModel.phase == .transcribing ? 1 : opacity)
         .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isExpanded)
         .animation(.easeIn(duration: 0.3), value: exitOffset)
     }
@@ -139,55 +148,57 @@ struct OverlayView: View {
         }
     }
     
-    // MARK: - Animations
+    // MARK: - Progress Handling
+    
+    private func handleProgressChange(_ progress: CGFloat) {
+        // Розширюємо UI коли прогрес досягає порогу
+        if progress >= expandThreshold && !isExpanded && viewModel.phase == .recording {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                isExpanded = true
+            }
+            // Бари з'являються після розширення
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                if viewModel.phase == .recording {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                        barsAppeared = true
+                    }
+                }
+            }
+        }
+        
+        // Стискаємо UI коли прогрес падає нижче порогу
+        if progress < expandThreshold && isExpanded && viewModel.phase == .recording {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                barsAppeared = false
+                isExpanded = false
+            }
+        }
+    }
+    
+    // MARK: - Phase Animations
     
     private func handlePhaseChange(from oldPhase: DictationPhase, to newPhase: DictationPhase) {
         switch newPhase {
         case .idle:
-            // Вилітає за екран вгору
-            withAnimation(.easeIn(duration: 0.3)) {
-                exitOffset = -150
+            // Вилітає за екран вгору (тільки якщо був транскрибінг)
+            if oldPhase == .transcribing {
+                withAnimation(.easeIn(duration: 0.3)) {
+                    exitOffset = -150
+                }
             }
-            // Прибираємо view після завершення анімації
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                isVisible = false
-                isShowing = false
-                barsAppeared = false
-                exitOffset = 0
-                processingOffset = 0
-                isExpanded = false
-            }
+            // Скидаємо стан одразу (без затримки, бо вікно все одно ховається)
+            barsAppeared = false
+            processingOffset = 0
+            isExpanded = false
+            // exitOffset скидається при наступному .recording
             
         case .recording:
-            // Скидаємо стан
+            // Скидаємо стан для нового запису
             exitOffset = 0
             processingOffset = 0
             barsAppeared = false
             isExpanded = false
-            
-            // Додаємо view в ієрархію
-            isVisible = true
-            
-            // Анімація появи
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                    isShowing = true
-                }
-            }
-            
-            // Розширюється
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                    isExpanded = true
-                }
-            }
-            
-            // Бари з'являються
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
-                    barsAppeared = true
-                }
-            }
+            // isExpanded і barsAppeared керуються через handleProgressChange
             
         case .transcribing:
             // Бари зникають

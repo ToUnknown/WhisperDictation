@@ -17,9 +17,33 @@ final class AudioRecorder {
     private var engine: AVAudioEngine?
     private var audioFile: AVAudioFile?
     private var recordingURL: URL?
-    private var isRecording = false
-    private let recordingQueue = DispatchQueue(label: "com.whisper.recording", qos: .userInitiated)
     private let microphoneManager = MicrophoneManager.shared
+    
+    // Thread-safe state management
+    private let stateLock = NSLock()
+    private var _state: RecordingState = .idle
+    private var state: RecordingState {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return _state
+        }
+        set {
+            stateLock.lock()
+            _state = newValue
+            lastStateChangeTime = Date()
+            stateLock.unlock()
+        }
+    }
+    
+    private enum RecordingState {
+        case idle
+        case starting
+        case recording
+        case stopping
+    }
+    
+    private let recordingQueue = DispatchQueue(label: "com.whisper.recording", qos: .userInitiated)
     
     // Для плавної анімації рівня звуку
     private var previousLevel: CGFloat = 0
@@ -27,36 +51,159 @@ final class AudioRecorder {
     // Для відновлення системного пристрою за замовчуванням
     private var originalDefaultDevice: AudioDeviceID?
     
-    // AAC підтримує тільки ці sample rates
-    private let aacSupportedSampleRates: [Double] = [48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000]
+    // Для відстеження тривалості запису
+    private var recordingStartTime: Date?
+    
     
     /// Callback для передачі URL записаного файлу
     var onRecordingComplete: ((URL) -> Void)?
+    
+    /// Поточна сесія запису
+    private var currentSession: Int = 0
+    
+    /// Час останньої зміни стану (для timeout)
+    private var lastStateChangeTime: Date = Date()
     
     private init() {}
     
     // MARK: - Public Methods
     
-    func start() {
+    func start(session: Int = 0) {
+        stateLock.lock()
+        
+        // Якщо вже йде запис для цієї ж сесії - нічого не робимо
+        if _state == .recording && currentSession == session {
+            print("[AudioRecorder] Already recording for session \(session)")
+            stateLock.unlock()
+            return
+        }
+        
+        // Якщо стан не idle - спочатку очищаємо попередній запис
+        if _state != .idle {
+            print("[AudioRecorder] Cleaning up previous state \(_state) before starting session \(session)")
+            
+            // Очищаємо ресурси синхронно
+            if let eng = engine {
+                eng.stop()
+                eng.inputNode.removeTap(onBus: 0)
+                engine = nil
+            }
+            audioFile = nil
+            if let url = recordingURL {
+                try? FileManager.default.removeItem(at: url)
+                recordingURL = nil
+            }
+            recordingStartTime = nil
+        }
+        
+        _state = .starting
+        lastStateChangeTime = Date()
+        currentSession = session
+        stateLock.unlock()
+        
+        print("[AudioRecorder] Starting recording for session \(session)")
+        
         recordingQueue.async { [weak self] in
             self?.startRecording()
         }
     }
     
-    func stopAndTranscribe() {
-        recordingQueue.async { [weak self] in
-            self?.stopRecording()
+    /// Повертає поточну сесію запису
+    var activeSession: Int {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return currentSession
+    }
+    
+    /// Примусово скидає стан рекордера
+    func forceReset() {
+        stateLock.lock()
+        print("[AudioRecorder] Force reset from state \(_state)")
+        
+        // Зупиняємо engine якщо є
+        if let engine = engine {
+            engine.stop()
+            engine.inputNode.removeTap(onBus: 0)
+            self.engine = nil
+        }
+        
+        // Закриваємо файл
+        audioFile = nil
+        
+        // Видаляємо тимчасовий файл
+        if let url = recordingURL {
+            try? FileManager.default.removeItem(at: url)
+            recordingURL = nil
+        }
+        
+        // Відновлюємо мікрофон
+        restoreOriginalDefaultDevice()
+        
+        // Скидаємо стан
+        _state = .idle
+        lastStateChangeTime = Date()
+        recordingStartTime = nil
+        
+        stateLock.unlock()
+    }
+    
+    func stopAndTranscribe(session: Int = 0) {
+        stateLock.lock()
+        let currentState = _state
+        let recordingSession = currentSession
+        
+        print("[AudioRecorder] stopAndTranscribe - session \(session), recorder session \(recordingSession), state \(currentState)")
+        
+        switch currentState {
+        case .recording:
+            // Normal case - stop recording and transcribe
+            _state = .stopping
+            lastStateChangeTime = Date()
+            let sessionToStop = recordingSession
+            stateLock.unlock()
+            recordingQueue.async { [weak self] in
+                self?.stopRecording(session: sessionToStop)
+            }
+            
+        case .starting:
+            // Recording is being set up - wait a bit and try again
+            let startTime = lastStateChangeTime
+            stateLock.unlock()
+            let elapsed = Date().timeIntervalSince(startTime)
+            if elapsed < 2.0 {
+                print("[AudioRecorder] Recording is starting (\(String(format: "%.1f", elapsed))s), waiting...")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                    self?.stopAndTranscribe(session: session)
+                }
+            } else {
+                print("[AudioRecorder] Starting timeout, resetting")
+                forceReset()
+                DispatchQueue.main.async {
+                    DictationUIState.shared.forceReset()
+                    OverlayWindow.shared.hide()
+                }
+            }
+            
+        case .stopping:
+            // Already stopping, nothing to do
+            stateLock.unlock()
+            print("[AudioRecorder] Already stopping")
+            
+        case .idle:
+            // Not recording, just reset UI
+            stateLock.unlock()
+            print("[AudioRecorder] Not recording, resetting UI for session \(session)")
+            DispatchQueue.main.async {
+                if DictationUIState.shared.reset(forSession: session) {
+                    OverlayWindow.shared.hide()
+                }
+            }
         }
     }
     
     // MARK: - Private Recording Methods
     
     private func startRecording() {
-        guard !isRecording else {
-            print("[AudioRecorder] Already recording")
-            return
-        }
-        
         // Скидаємо рівень звуку для нового запису
         previousLevel = 0
         
@@ -70,9 +217,9 @@ final class AudioRecorder {
         // Отримуємо inputNode
         let inputNode = engine.inputNode
         
-        // Створюємо тимчасовий файл
+        // Створюємо тимчасовий файл (WAV format - more reliable)
         let tempDir = FileManager.default.temporaryDirectory
-        let fileName = "dictation_\(UUID().uuidString).m4a"
+        let fileName = "dictation_\(UUID().uuidString).wav"
         let fileURL = tempDir.appendingPathComponent(fileName)
         self.recordingURL = fileURL
         
@@ -83,26 +230,28 @@ final class AudioRecorder {
         guard inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 else {
             print("[AudioRecorder] Invalid input format: \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) channels")
             restoreOriginalDefaultDevice()
+            state = .idle
             handleRecordingError()
             return
         }
         
         print("[AudioRecorder] Input format: \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) channels")
         
-        // Вибираємо найближчий підтримуваний AAC sample rate
-        let targetSampleRate = findBestSampleRate(for: inputFormat.sampleRate)
-        print("[AudioRecorder] Target AAC sample rate: \(targetSampleRate) Hz")
+        // Target: 16kHz mono for Whisper (optimal for speech recognition)
+        let targetSampleRate: Double = 16000
+        print("[AudioRecorder] Target sample rate: \(targetSampleRate) Hz")
         
-        // Створюємо проміжний формат для конвертації (якщо потрібно)
+        // Створюємо проміжний формат для конвертації
         let needsConversion = inputFormat.sampleRate != targetSampleRate || inputFormat.channelCount != 1
         
-        // Формат для запису в файл (AAC)
+        // Формат для запису в файл (16-bit PCM WAV)
         let outputSettings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: targetSampleRate,
             AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
-            AVEncoderBitRateKey: 128000
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false
         ]
         
         do {
@@ -110,6 +259,7 @@ final class AudioRecorder {
         } catch {
             print("[AudioRecorder] Failed to create audio file: \(error)")
             restoreOriginalDefaultDevice()
+            state = .idle
             handleRecordingError()
             return
         }
@@ -133,47 +283,89 @@ final class AudioRecorder {
         
         // Встановлюємо tap на input node
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, time in
-            self?.processBuffer(buffer, converter: converter, outputFormat: outputFormat)
+            guard let self = self, self.state == .recording else { return }
+            self.processBuffer(buffer, converter: converter, outputFormat: outputFormat)
         }
         
         // Запускаємо engine
         do {
             try engine.start()
-            isRecording = true
+            state = .recording
+            recordingStartTime = Date()
             print("[AudioRecorder] Recording started to: \(fileURL.path)")
         } catch {
             print("[AudioRecorder] Failed to start engine: \(error)")
             inputNode.removeTap(onBus: 0)
             restoreOriginalDefaultDevice()
+            state = .idle
             handleRecordingError()
         }
     }
     
-    private func stopRecording() {
-        guard isRecording, let engine = engine else {
-            print("[AudioRecorder] Not recording")
+    private func stopRecording(session: Int = 0) {
+        guard let engine = engine else {
+            print("[AudioRecorder] No engine to stop")
+            state = .idle
             return
         }
+        
+        print("[AudioRecorder] Stopping recording for session \(session)")
+        
+        // Capture URL before any cleanup
+        let url = recordingURL
+        recordingURL = nil
         
         // Зупиняємо engine
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
-        isRecording = false
         self.engine = nil
         
-        // Закриваємо файл
-        audioFile = nil
+        // Закриваємо файл - важливо зробити це в окремому блоці щоб файл був закритий
+        closeAudioFile()
         
         // Відновлюємо оригінальний пристрій за замовчуванням
         restoreOriginalDefaultDevice()
         
-        guard let url = recordingURL else {
+        guard let url = url else {
             print("[AudioRecorder] No recording URL")
+            state = .idle
             handleRecordingError()
             return
         }
         
-        print("[AudioRecorder] Recording stopped: \(url.path)")
+        // Обчислюємо тривалість запису
+        let duration: Double
+        if let startTime = recordingStartTime {
+            duration = Date().timeIntervalSince(startTime)
+            print("[AudioRecorder] Recording stopped: \(url.path) (duration: \(String(format: "%.2f", duration))s, session \(session))")
+        } else {
+            duration = 0
+            print("[AudioRecorder] Recording stopped: \(url.path) (duration: unknown, session \(session))")
+        }
+        recordingStartTime = nil
+        
+        // Мінімальна тривалість запису (0.5 секунди) - коротші записи вважаються випадковими
+        let minimumDuration: Double = 0.5
+        
+        // Якщо запис занадто короткий - тихо закриваємо без помилки
+        if duration < minimumDuration && duration > 0 {
+            print("[AudioRecorder] Recording too short (\(String(format: "%.2f", duration))s < \(minimumDuration)s), dismissing silently for session \(session)")
+            try? FileManager.default.removeItem(at: url)
+            state = .idle
+            DispatchQueue.main.async {
+                // Тільки ховаємо якщо reset() успішний (кнопка не натиснута, та ж сесія)
+                if DictationUIState.shared.reset(forSession: session) {
+                    OverlayWindow.shared.hide()
+                }
+            }
+            return
+        }
+        
+        // Даємо час на фінальізацію файлу
+        Thread.sleep(forTimeInterval: 0.1)
+        
+        // Мінімальний розмір файлу (приблизно 0.5с при 16kHz 16-bit mono = ~16KB)
+        let minimumFileSize: Int64 = 16000
         
         // Перевіряємо чи файл існує і має вміст
         if FileManager.default.fileExists(atPath: url.path) {
@@ -182,24 +374,48 @@ final class AudioRecorder {
                 let fileSize = attributes[.size] as? Int64 ?? 0
                 print("[AudioRecorder] File size: \(fileSize) bytes")
                 
-                if fileSize > 100 {
+                if fileSize > minimumFileSize {
+                    // Фіксуємо UI видимим для транскрибування
+                    DispatchQueue.main.async {
+                        DictationUIState.shared.lockOverlayVisible()
+                        DictationUIState.shared.phase = .transcribing
+                    }
+                    
+                    // Set state to idle before async transcription
+                    state = .idle
                     if let callback = onRecordingComplete {
                         callback(url)
                     } else {
                         transcribe(fileURL: url)
                     }
                 } else {
-                    print("[AudioRecorder] Recording file is empty")
+                    print("[AudioRecorder] Recording file too small (\(fileSize) bytes < \(minimumFileSize) bytes), dismissing silently for session \(session)")
                     try? FileManager.default.removeItem(at: url)
-                    handleRecordingError()
+                    state = .idle
+                    // UI вже анімується до зникнення, просто скидаємо стан
+                    DispatchQueue.main.async {
+                        // Тільки ховаємо якщо reset() успішний (кнопка не натиснута, та ж сесія)
+                        if DictationUIState.shared.reset(forSession: session) {
+                            OverlayWindow.shared.hide()
+                        }
+                    }
                 }
             } catch {
                 print("[AudioRecorder] Error checking file: \(error)")
+                state = .idle
                 handleRecordingError()
             }
         } else {
             print("[AudioRecorder] Recording file not found")
+            state = .idle
             handleRecordingError()
+        }
+    }
+    
+    private func closeAudioFile() {
+        // Закриваємо файл в окремому блоці для гарантованого звільнення
+        autoreleasepool {
+            audioFile = nil
         }
     }
     
@@ -244,7 +460,7 @@ final class AudioRecorder {
     private func handleRecordingError() {
         DispatchQueue.main.async {
             self.showErrorAlert(title: "Recording Error", message: "Failed to record audio. Please check your microphone permissions and try again.")
-            DictationUIState.shared.reset()
+            DictationUIState.shared.forceReset()
             OverlayWindow.shared.hide()
         }
     }
@@ -268,25 +484,9 @@ final class AudioRecorder {
     
     // MARK: - Private Methods
     
-    private func findBestSampleRate(for inputRate: Double) -> Double {
-        // Якщо input rate підтримується AAC - використовуємо його
-        if aacSupportedSampleRates.contains(inputRate) {
-            return inputRate
-        }
-        
-        // Інакше знаходимо найближчий менший
-        for rate in aacSupportedSampleRates {
-            if rate <= inputRate {
-                return rate
-            }
-        }
-        
-        // Fallback
-        return 44100
-    }
-    
     private func processBuffer(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter?, outputFormat: AVAudioFormat?) {
-        guard let file = audioFile else { return }
+        // Double-check we're still recording and have a valid file
+        guard state == .recording, let file = audioFile else { return }
         
         // Обчислюємо RMS для візуалізації
         let level = calculateRMS(buffer: buffer)
@@ -297,9 +497,11 @@ final class AudioRecorder {
         // Якщо потрібна конвертація
         if let converter = converter, let outputFormat = outputFormat {
             let ratio = outputFormat.sampleRate / buffer.format.sampleRate
-            let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+            // Add some extra capacity to ensure we have enough space
+            let outputFrameCount = AVAudioFrameCount(ceil(Double(buffer.frameLength) * ratio) + 100)
             
             guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outputFrameCount) else {
+                print("[AudioRecorder] Failed to create output buffer")
                 return
             }
             
@@ -316,10 +518,20 @@ final class AudioRecorder {
                 return buffer
             }
             
-            converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
+            let status = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
             
             if let error = error {
                 print("[AudioRecorder] Conversion error: \(error)")
+                return
+            }
+            
+            if status == .error {
+                print("[AudioRecorder] Converter returned error status")
+                return
+            }
+            
+            // Only write if we have data
+            guard outputBuffer.frameLength > 0 else {
                 return
             }
             
@@ -377,7 +589,7 @@ final class AudioRecorder {
                     } else {
                         print("[AudioRecorder] Empty transcription, skipping insert")
                         self.showErrorAlert(title: "Empty Transcription", message: "The audio was transcribed but the result was empty. Please try again.")
-                        DictationUIState.shared.reset()
+                        DictationUIState.shared.forceReset()
                         OverlayWindow.shared.hide()
                     }
                     
@@ -385,7 +597,7 @@ final class AudioRecorder {
                     print("[AudioRecorder] Transcription error: \(error)")
                     let errorMessage = self.getErrorMessage(from: error)
                     self.showErrorAlert(title: "Transcription Failed", message: errorMessage)
-                    DictationUIState.shared.reset()
+                    DictationUIState.shared.forceReset()
                     OverlayWindow.shared.hide()
                 }
                 

@@ -13,8 +13,6 @@ import ApplicationServices
 final class TextInjector {
     static let shared = TextInjector()
     
-    private var previousContents: PasteboardContents?
-    
     private init() {}
     
     // MARK: - Public Methods
@@ -26,38 +24,38 @@ final class TextInjector {
             return
         }
         
+        print("[TextInjector] Inserting text (\(text.count) chars): \(text.prefix(100))\(text.count > 100 ? "..." : "")")
+        
         // Перевіряємо дозволи на Accessibility
         guard hasAccessibilityPermissions() else {
             print("[TextInjector] ERROR: Accessibility permissions not granted")
             showAccessibilityPermissionAlert()
-            DictationUIState.shared.reset()
+            DictationUIState.shared.forceReset()
             OverlayWindow.shared.hide()
             return
         }
         
         let pasteboard = NSPasteboard.general
         
-        // Зберігаємо поточний вміст буфера обміну
-        previousContents = savePasteboardContents(pasteboard)
-        
         // Очищаємо і записуємо новий текст
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        let success = pasteboard.setString(text, forType: .string)
+        print("[TextInjector] Pasteboard set: \(success)")
         
-        // Невелика затримка перед вставкою
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+        // Verify what's on the pasteboard
+        if let pasteboardText = pasteboard.string(forType: .string) {
+            print("[TextInjector] Pasteboard contains (\(pasteboardText.count) chars)")
+        }
+        
+        // Затримка перед вставкою щоб pasteboard був готовий
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             // Симулюємо Cmd+V
             self?.simulatePaste()
             
-            // Відновлюємо попередній вміст буфера через затримку
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                if let contents = self?.previousContents {
-                    self?.restorePasteboardContents(pasteboard, contents: contents)
-                    self?.previousContents = nil
-                }
-                
-                // Завершуємо - скидаємо стан і ховаємо overlay
-                DictationUIState.shared.reset()
+            // Завершуємо - скидаємо стан і ховаємо overlay
+            // Не відновлюємо pasteboard - залишаємо текст для можливості повторної вставки
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                DictationUIState.shared.forceReset()
                 OverlayWindow.shared.hide()
             }
         }
@@ -90,8 +88,8 @@ final class TextInjector {
     }
     
     private func simulatePaste() {
-        // Створюємо події для Cmd+V
-        let source = CGEventSource(stateID: .combinedSessionState)
+        // Створюємо події для Cmd+V з новим event source
+        let source = CGEventSource(stateID: .hidSystemState)
         
         // Command down
         guard let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: true) else {
@@ -120,54 +118,15 @@ final class TextInjector {
             return
         }
         
-        // Відправляємо події
+        // Відправляємо події з невеликими затримками
         cmdDown.post(tap: .cghidEventTap)
+        usleep(10000) // 10ms
         vDown.post(tap: .cghidEventTap)
+        usleep(10000) // 10ms
         vUp.post(tap: .cghidEventTap)
+        usleep(10000) // 10ms
         cmdUp.post(tap: .cghidEventTap)
         
-        print("[TextInjector] Paste simulated")
-    }
-    
-    // MARK: - Pasteboard Backup/Restore
-    
-    private struct PasteboardContents {
-        var items: [[NSPasteboard.PasteboardType: Data]] = []
-    }
-    
-    private func savePasteboardContents(_ pasteboard: NSPasteboard) -> PasteboardContents {
-        var contents = PasteboardContents()
-        
-        guard let items = pasteboard.pasteboardItems else {
-            return contents
-        }
-        
-        for item in items {
-            var itemData: [NSPasteboard.PasteboardType: Data] = [:]
-            for type in item.types {
-                if let data = item.data(forType: type) {
-                    itemData[type] = data
-                }
-            }
-            if !itemData.isEmpty {
-                contents.items.append(itemData)
-            }
-        }
-        
-        return contents
-    }
-    
-    private func restorePasteboardContents(_ pasteboard: NSPasteboard, contents: PasteboardContents) {
-        guard !contents.items.isEmpty else { return }
-        
-        pasteboard.clearContents()
-        
-        for itemData in contents.items {
-            let item = NSPasteboardItem()
-            for (type, data) in itemData {
-                item.setData(data, forType: type)
-            }
-            pasteboard.writeObjects([item])
-        }
+        print("[TextInjector] Paste simulated with delays")
     }
 }

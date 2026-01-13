@@ -9,47 +9,68 @@ import SwiftUI
 
 struct MenuBarView: View {
     @StateObject private var viewModel: MenuBarViewModel
+    private let menuWidth: CGFloat = 260
 
     init(viewModel: MenuBarViewModel = MenuBarViewModel()) {
         _viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
             // Статус
             statusSection
 
             Divider()
+                .padding(.vertical, 4)
 
             // Вибір мікрофона
             microphoneSection
 
             Divider()
-
-            // Інструкція
-            instructionSection
-
-            Divider()
+                .padding(.vertical, 4)
 
             // Історія
             historySection
 
             Divider()
+                .padding(.vertical, 4)
 
             // Налаштування
             SettingsLink {
-                Text("Settings...")
+                HStack {
+                    Text("Settings...")
+                    Spacer()
+                    Text("⌘,")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
-            .keyboardShortcut(",", modifiers: .command)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
 
             Divider()
+                .padding(.vertical, 4)
 
             // Вихід
-            Button("Quit WhisperDictation") {
+            Button {
                 viewModel.quitApp()
+            } label: {
+                HStack {
+                    Text("Quit WhisperDictation")
+                    Spacer()
+                    Text("⌘Q")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
-            .keyboardShortcut("q", modifiers: .command)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
         }
+        .frame(width: menuWidth)
+        .padding(.vertical, 8)
+        .background(MenuBarWindowAccessor())
     }
 
     // MARK: - Status Section
@@ -63,28 +84,19 @@ struct MenuBarView: View {
 
             Text(viewModel.hasValidKey ? "Ready" : "API Key Required")
                 .font(.caption)
+
+            Spacer(minLength: 8)
+
+            Text("⌥")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.15))
+                .cornerRadius(4)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-    }
-
-    // MARK: - Instruction Section
-
-    private var instructionSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("How to use:")
-                .font(.caption)
-                .fontWeight(.semibold)
-
-            Text("Hold ⌥ Option to record")
-                .font(.caption)
-
-            Text("Release to transcribe")
-                .font(.caption)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .foregroundColor(.secondary)
     }
 
     // MARK: - History Section
@@ -140,12 +152,20 @@ struct MenuBarView: View {
                 viewModel.refreshDevices()
             }
         } label: {
-            Label {
-                Text(viewModel.selectedMicrophoneName)
-            } icon: {
+            HStack {
                 Image(systemName: "mic.fill")
+                Text(viewModel.selectedMicrophoneName)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
     }
 }
 
@@ -154,28 +174,92 @@ private struct HistoryRowView: View {
     let copyAction: () -> Void
     @State private var isHovered = false
 
+    private let copyButtonWidth: CGFloat = 28
+
     var body: some View {
-        HStack(spacing: 8) {
-            Text(item.text)
-                .font(.caption)
-                .lineLimit(isHovered ? 5 : 1)
-                .truncationMode(.tail)
-                .animation(.easeInOut(duration: 0.2), value: isHovered)
+        Button(action: copyAction) {
+            HStack(spacing: 6) {
+                Text(item.text)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 8)
-
-            Button("Copy") {
-                copyAction()
+                // Always reserve space for the copy button
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 10))
+                    .frame(width: copyButtonWidth, height: 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.accentColor.opacity(isHovered ? 1 : 0))
+                    )
+                    .foregroundColor(isHovered ? .white : .clear)
             }
-            .buttonStyle(.borderless)
-            .font(.caption)
-            .opacity(isHovered ? 1 : 0)
-            .animation(.easeInOut(duration: 0.2), value: isHovered)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 8)
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
         .onHover { hovering in
-            isHovered = hovering
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+// MARK: - Menu Bar Window Accessor
+
+private struct MenuBarWindowAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            context.coordinator.setupMonitors(for: view)
+        }
+        return view
+    }
+    
+    func updateNSView(_ nsView: NSView, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    class Coordinator {
+        private var clickMonitor: Any?
+        private var appDeactivationObserver: NSObjectProtocol?
+        private weak var window: NSWindow?
+        
+        func setupMonitors(for view: NSView) {
+            guard let window = view.window else { return }
+            self.window = window
+            
+            // Monitor for clicks outside the window
+            clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+                self?.closeWindow()
+            }
+            
+            // Monitor for app deactivation (switching to another app)
+            appDeactivationObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didResignActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.closeWindow()
+            }
+        }
+        
+        private func closeWindow() {
+            window?.close()
+        }
+        
+        deinit {
+            if let monitor = clickMonitor {
+                NSEvent.removeMonitor(monitor)
+            }
+            if let observer = appDeactivationObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
         }
     }
 }

@@ -109,23 +109,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         
-        // Встановлюємо стан і починаємо запис
-        DictationUIState.shared.phase = .recording
+        // Перевіряємо чи вже не йде транскрибування
+        guard DictationUIState.shared.phase != .transcribing else {
+            print("[AppDelegate] Transcribing in progress, ignoring")
+            return
+        }
+        
+        // Показуємо вікно (якщо ще не показано)
         OverlayWindow.shared.show()
-        AudioRecorder.shared.start()
+        
+        // Починаємо анімацію появи (продовжує з поточного прогресу)
+        // Це також створює нову сесію
+        DictationUIState.shared.startOverlayAppear()
+        
+        // Завжди встановлюємо phase в .recording
+        DictationUIState.shared.phase = .recording
+        
+        // Завжди намагаємось почати запис - AudioRecorder сам вирішить чи можна
+        let currentSession = DictationUIState.shared.sessionID
+        AudioRecorder.shared.start(session: currentSession)
     }
     
     private func handleOptionUp() {
         print("[AppDelegate] Option key released")
         
+        // Запам'ятовуємо сесію з AudioRecorder (це та сесія, яка реально записується)
+        let recorderSession = AudioRecorder.shared.activeSession
+        
+        // Починаємо анімацію зникнення (незалежно від фази)
+        DictationUIState.shared.startOverlayDisappear()
+        
         // Перевіряємо чи був запис
         guard DictationUIState.shared.phase == .recording else {
+            print("[AppDelegate] Not in recording phase, ignoring stop")
             return
         }
         
-        // Переходимо до транскрибування
-        DictationUIState.shared.phase = .transcribing
-        AudioRecorder.shared.stopAndTranscribe()
+        // Зупиняємо запис - AudioRecorder сам визначить чи транскрибувати
+        AudioRecorder.shared.stopAndTranscribe(session: recorderSession)
     }
     
     private func showNoAPIKeyAlert() {
