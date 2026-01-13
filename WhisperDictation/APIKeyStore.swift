@@ -55,10 +55,11 @@ final class APIKeyStore: APIKeyStoring, ObservableObject {
         return !trimmedKey.isEmpty && isValidAPIKeyFormat(trimmedKey)
     }
     
-    /// Validates that the API key has the correct format (starts with "sk-")
+    /// Validates that the API key has a reasonable format (non-empty, minimum length).
     func isValidAPIKeyFormat(_ key: String) -> Bool {
         let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedKey.hasPrefix("sk-") && trimmedKey.count > 10
+        let minimumLength = 10
+        return trimmedKey.count >= minimumLength
     }
     
     private func migrateUserDefaultsIfNeeded() {
