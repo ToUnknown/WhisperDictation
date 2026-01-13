@@ -233,9 +233,13 @@ final class MicrophoneManager: ObservableObject {
             return false
         }
         
-        let bufferListPtr = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
-        defer { bufferListPtr.deallocate() }
-        
+        let rawBufferList = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(propertySize),
+            alignment: MemoryLayout<AudioBufferList>.alignment
+        )
+        defer { rawBufferList.deallocate() }
+
+        let bufferListPtr = rawBufferList.bindMemory(to: AudioBufferList.self, capacity: 1)
         let getStatus = AudioObjectGetPropertyData(
             deviceID,
             &propertyAddress,
@@ -244,13 +248,13 @@ final class MicrophoneManager: ObservableObject {
             &propertySize,
             bufferListPtr
         )
-        
+
         guard getStatus == noErr else {
             return false
         }
-        
-        let bufferList = bufferListPtr.pointee
-        return bufferList.mNumberBuffers > 0 && bufferList.mBuffers.mNumberChannels > 0
+
+        let bufferList = UnsafeMutableAudioBufferListPointer(bufferListPtr)
+        return bufferList.contains { $0.mNumberChannels > 0 }
     }
     
     private func getDeviceName(deviceID: AudioDeviceID) -> String? {
@@ -355,7 +359,6 @@ final class MicrophoneManager: ObservableObject {
         )
     }
 }
-
 
 
 

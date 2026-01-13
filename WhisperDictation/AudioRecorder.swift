@@ -9,6 +9,7 @@ import Foundation
 import AVFoundation
 import Accelerate
 import CoreAudio
+import AudioToolbox
 import AppKit
 
 final class AudioRecorder {
@@ -23,9 +24,6 @@ final class AudioRecorder {
     
     // Для плавної анімації рівня звуку
     private var previousLevel: CGFloat = 0
-    
-    // Для відновлення системного пристрою за замовчуванням
-    private var originalDefaultDevice: AudioDeviceID?
     
     // AAC підтримує тільки ці sample rates
     private let aacSupportedSampleRates: [Double] = [48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000]
@@ -60,15 +58,15 @@ final class AudioRecorder {
         // Скидаємо рівень звуку для нового запису
         previousLevel = 0
         
-        // Налаштовуємо вибраний мікрофон через зміну системного пристрою за замовчуванням
-        setupSelectedMicrophone()
-        
         // Створюємо новий engine для кожного запису
         let engine = AVAudioEngine()
         self.engine = engine
         
         // Отримуємо inputNode
         let inputNode = engine.inputNode
+
+        // Налаштовуємо вибраний мікрофон на input node
+        configureSelectedMicrophone(for: inputNode)
         
         // Створюємо тимчасовий файл
         let tempDir = FileManager.default.temporaryDirectory
@@ -82,7 +80,6 @@ final class AudioRecorder {
         // Перевіряємо чи формат валідний
         guard inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 else {
             print("[AudioRecorder] Invalid input format: \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) channels")
-            restoreOriginalDefaultDevice()
             handleRecordingError()
             return
         }
@@ -109,7 +106,6 @@ final class AudioRecorder {
             audioFile = try AVAudioFile(forWriting: fileURL, settings: outputSettings)
         } catch {
             print("[AudioRecorder] Failed to create audio file: \(error)")
-            restoreOriginalDefaultDevice()
             handleRecordingError()
             return
         }
@@ -144,7 +140,6 @@ final class AudioRecorder {
         } catch {
             print("[AudioRecorder] Failed to start engine: \(error)")
             inputNode.removeTap(onBus: 0)
-            restoreOriginalDefaultDevice()
             handleRecordingError()
         }
     }
@@ -163,9 +158,6 @@ final class AudioRecorder {
         
         // Закриваємо файл
         audioFile = nil
-        
-        // Відновлюємо оригінальний пристрій за замовчуванням
-        restoreOriginalDefaultDevice()
         
         guard let url = recordingURL else {
             print("[AudioRecorder] No recording URL")
@@ -205,38 +197,33 @@ final class AudioRecorder {
     
     // MARK: - Microphone Selection
     
-    private func setupSelectedMicrophone() {
+    private func configureSelectedMicrophone(for inputNode: AVAudioInputNode) {
         // Якщо вибрано "System Default" - не змінюємо нічого
         guard let selectedDeviceID = microphoneManager.getSelectedDeviceID() else {
             print("[AudioRecorder] Using system default microphone")
-            originalDefaultDevice = nil
             return
         }
-        
-        // Зберігаємо поточний системний пристрій за замовчуванням
-        originalDefaultDevice = microphoneManager.getSystemDefaultInputDevice()
-        print("[AudioRecorder] Original default device: \(originalDefaultDevice ?? 0)")
-        
-        // Встановлюємо вибраний пристрій як системний за замовчуванням
-        if microphoneManager.setSystemDefaultInputDevice(selectedDeviceID) {
-            print("[AudioRecorder] Set selected device \(selectedDeviceID) as system default")
-            
-            // Невелика затримка для застосування змін
-            Thread.sleep(forTimeInterval: 0.1)
+
+        guard let audioUnit = inputNode.audioUnit else {
+            print("[AudioRecorder] Input node audio unit unavailable; using system default")
+            return
+        }
+
+        var deviceID = selectedDeviceID
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &deviceID,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+
+        if status == noErr {
+            print("[AudioRecorder] Set input node device to \(selectedDeviceID)")
         } else {
-            print("[AudioRecorder] Failed to set selected device as system default, using current default")
-            originalDefaultDevice = nil
+            print("[AudioRecorder] Failed to set input node device: \(status)")
         }
-    }
-    
-    private func restoreOriginalDefaultDevice() {
-        guard let originalDevice = originalDefaultDevice else {
-            return
-        }
-        
-        print("[AudioRecorder] Restoring original default device: \(originalDevice)")
-        microphoneManager.setSystemDefaultInputDevice(originalDevice)
-        originalDefaultDevice = nil
     }
     
     // MARK: - Error Handling
