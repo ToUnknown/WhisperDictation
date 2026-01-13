@@ -40,7 +40,7 @@ final class WhisperClient {
         
         // Перевіряємо формат API ключа
         if !APIKeyStore.shared.isValidAPIKeyFormat(apiKey) {
-            print("[WhisperClient] ERROR: API key format is invalid (must start with 'sk-' and be at least 10 characters)")
+            print("[WhisperClient] ERROR: API key format is invalid (must be non-empty and at least 10 characters)")
             completion(.failure(WhisperError.invalidAPIKeyFormat))
             return
         }
@@ -251,7 +251,7 @@ enum WhisperError: LocalizedError {
         case .missingAPIKey:
             return "API key is not set. Please configure it in Settings."
         case .invalidAPIKeyFormat:
-            return "API key format is invalid. OpenAI API keys must start with 'sk-' and be at least 10 characters long."
+            return "API key format is invalid. Please ensure it is non-empty and at least 10 characters long."
         case .fileReadError:
             return "Failed to read audio file."
         case .noData:
