@@ -102,10 +102,32 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Open WhisperDictation at login", isOn: Binding(
+                    get: { viewModel.launchAtLoginEnabled },
+                    set: { viewModel.setLaunchAtLoginEnabled($0) }
+                ))
+                .toggleStyle(.switch)
+
+                Text("Launch the app automatically when you sign in.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
         .padding(20)
         .frame(width: 340)
         .animation(.easeInOut(duration: 0.2), value: viewModel.showSavedMessage)
+        .alert("Login Item Error", isPresented: Binding(
+            get: { viewModel.launchAtLoginErrorMessage != nil },
+            set: { if !$0 { viewModel.launchAtLoginErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.launchAtLoginErrorMessage ?? "Unable to update login item.")
+        }
         .background(WindowAccessor())
     }
 }
