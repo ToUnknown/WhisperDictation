@@ -8,12 +8,15 @@
 import AppKit
 import Combine
 import Foundation
+import ServiceManagement
 
 final class SettingsViewModel: ObservableObject {
     @Published var showSavedMessage: Bool = false
     @Published private(set) var hasValidKey: Bool = false
     @Published private(set) var hasStoredKey: Bool = false
     @Published private(set) var maskedKey: String = ""
+    @Published var launchAtLoginEnabled: Bool = false
+    @Published var launchAtLoginErrorMessage: String? = nil
 
     private let store: APIKeyStore
     
@@ -21,6 +24,7 @@ final class SettingsViewModel: ObservableObject {
         self.store = store
         bindStore()
         updateMaskedKey()
+        updateLaunchAtLoginStatus()
     }
 
     func pasteKeyFromClipboard() {
@@ -40,6 +44,20 @@ final class SettingsViewModel: ObservableObject {
         store.apiKey = nil
         updateMaskedKey()
         showSaveConfirmation()
+    }
+
+    func setLaunchAtLoginEnabled(_ isEnabled: Bool) {
+        do {
+            if isEnabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            launchAtLoginEnabled = isEnabled
+        } catch {
+            updateLaunchAtLoginStatus()
+            launchAtLoginErrorMessage = "Unable to update login item. Please try again."
+        }
     }
 
     private func updateMaskedKey() {
@@ -86,6 +104,10 @@ final class SettingsViewModel: ObservableObject {
                 self?.updateMaskedKey()
             }
             .store(in: &cancellables)
+    }
+
+    private func updateLaunchAtLoginStatus() {
+        launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
     }
     
     private var cancellables = Set<AnyCancellable>()
