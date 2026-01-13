@@ -8,7 +8,11 @@
 import SwiftUI
 
 struct OverlayView: View {
-    @ObservedObject private var state = DictationUIState.shared
+    @StateObject private var viewModel: OverlayViewModel
+
+    init(viewModel: OverlayViewModel = OverlayViewModel()) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
     
     // Розміри
     private let lineWidth: CGFloat = 120
@@ -36,7 +40,7 @@ struct OverlayView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.top, 20)
-        .onChange(of: state.phase) { oldValue, newValue in
+        .onChange(of: viewModel.phase) { oldValue, newValue in
             handlePhaseChange(from: oldValue, to: newValue)
         }
     }
@@ -53,14 +57,14 @@ struct OverlayView: View {
                 .shadow(color: .black.opacity(0.3), radius: 16, x: 0, y: 8)
             
             // Аудіовізуалізатор (при записі)
-            if state.phase == .recording && isExpanded {
+            if viewModel.phase == .recording && isExpanded {
                 audioVisualizerBars
                     .scaleEffect(y: barsAppeared ? 1 : 0, anchor: .center)
                     .opacity(barsAppeared ? 1 : 0)
             }
             
             // Анімація обробки (при транскрибуванні)
-            if state.phase == .transcribing && !isExpanded {
+            if viewModel.phase == .transcribing && !isExpanded {
                 processingLayer
             }
         }
@@ -85,14 +89,14 @@ struct OverlayView: View {
             }
         }
         .frame(height: maxBarHeight) // Фіксована висота всього HStack
-        .animation(.easeOut(duration: 0.1), value: state.level)
+        .animation(.easeOut(duration: 0.1), value: viewModel.level)
     }
     
     private func barHeight(for index: Int) -> CGFloat {
         let minHeight: CGFloat = 4
         let maxHeight: CGFloat = expandedHeight - 12
         
-        let level = state.level
+        let level = viewModel.level
         
         // Центральний бар найвищий, крайні - нижчі (симетрично)
         let center = CGFloat(barCount - 1) / 2.0

@@ -8,11 +8,11 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @ObservedObject private var store = APIKeyStore.shared
-    @State private var tempKey: String = ""
-    @State private var showKey: Bool = false
-    @State private var showSavedMessage: Bool = false
-    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel: SettingsViewModel
+
+    init(viewModel: SettingsViewModel = SettingsViewModel()) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -34,27 +34,27 @@ struct SettingsView: View {
             // Поле вводу
             HStack {
                 Group {
-                    if showKey {
-                        TextField("sk-...", text: $tempKey)
+                    if viewModel.showKey {
+                        TextField("sk-...", text: $viewModel.tempKey)
                     } else {
-                        SecureField("sk-...", text: $tempKey)
+                        SecureField("sk-...", text: $viewModel.tempKey)
                     }
                 }
                 .textFieldStyle(.roundedBorder)
                 
                 Button {
-                    showKey.toggle()
+                    viewModel.showKey.toggle()
                 } label: {
-                    Image(systemName: showKey ? "eye.slash" : "eye")
+                    Image(systemName: viewModel.showKey ? "eye.slash" : "eye")
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.borderless)
-                .help(showKey ? "Hide key" : "Show key")
+                .help(viewModel.showKey ? "Hide key" : "Show key")
             }
             
             // Кнопки
             HStack {
-                if showSavedMessage {
+                if viewModel.showSavedMessage {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
@@ -68,21 +68,19 @@ struct SettingsView: View {
                 Spacer()
                 
                 Button("Clear") {
-                    tempKey = ""
-                    store.apiKey = nil
-                    showSaveConfirmation()
+                    viewModel.clearKey()
                 }
-                .disabled(tempKey.isEmpty && store.apiKey == nil)
+                .disabled(viewModel.tempKey.isEmpty && !viewModel.hasStoredKey)
                 
                 Button("Save") {
-                    saveKey()
+                    viewModel.saveKey()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(tempKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(viewModel.tempKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             
             // Статус
-            if store.hasValidKey {
+            if viewModel.hasValidKey {
                 HStack(spacing: 4) {
                     Circle()
                         .fill(.green)
@@ -104,25 +102,7 @@ struct SettingsView: View {
         }
         .padding(20)
         .frame(width: 340)
-        .onAppear {
-            tempKey = store.apiKey ?? ""
-        }
-        .animation(.easeInOut(duration: 0.2), value: showSavedMessage)
-    }
-    
-    // MARK: - Actions
-    
-    private func saveKey() {
-        let key = tempKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        store.apiKey = key.isEmpty ? nil : key
-        showSaveConfirmation()
-    }
-    
-    private func showSaveConfirmation() {
-        showSavedMessage = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            showSavedMessage = false
-        }
+        .animation(.easeInOut(duration: 0.2), value: viewModel.showSavedMessage)
     }
 }
 
@@ -131,5 +111,3 @@ struct SettingsView: View {
 #Preview {
     SettingsView()
 }
-
-
