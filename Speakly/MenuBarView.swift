@@ -74,7 +74,7 @@ struct MenuBarView: View {
                 viewModel.quitApp()
             } label: {
                 HStack {
-                    Text("Quit WhisperDictation")
+                    Text("Quit Speakly")
                     Spacer()
                     Image(systemName: "xmark")
                         .padding(.trailing, 12)
