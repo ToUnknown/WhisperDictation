@@ -29,7 +29,7 @@ struct WhisperDictationApp: App {
     // MARK: - Menu Bar Icon
     
     private var menuBarIcon: some View {
-        Image(systemName: "waveform.circle.fill")
+        Image(systemName: "message.badge.waveform.fill")
             .symbolRenderingMode(.hierarchical)
     }
     

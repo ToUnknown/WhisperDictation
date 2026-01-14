@@ -24,7 +24,9 @@ final class TextInjector {
             return
         }
         
-        print("[TextInjector] Inserting text (\(text.count) chars): \(text.prefix(100))\(text.count > 100 ? "..." : "")")
+        // Log full text for debugging multi-sentence issue
+        print("[TextInjector] Inserting text (\(text.count) chars)")
+        print("[TextInjector] Full text: \(text)")
         
         // Перевіряємо дозволи на Accessibility
         guard hasAccessibilityPermissions() else {
@@ -42,19 +44,19 @@ final class TextInjector {
         let success = pasteboard.setString(text, forType: .string)
         print("[TextInjector] Pasteboard set: \(success)")
         
-        // Verify what's on the pasteboard
+        // Verify what's on the pasteboard - log full content
         if let pasteboardText = pasteboard.string(forType: .string) {
-            print("[TextInjector] Pasteboard contains (\(pasteboardText.count) chars)")
+            print("[TextInjector] Pasteboard verification (\(pasteboardText.count) chars): \(pasteboardText)")
         }
         
-        // Затримка перед вставкою щоб pasteboard був готовий
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        // Longer delay before paste to ensure pasteboard is ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             // Симулюємо Cmd+V
             self?.simulatePaste()
             
             // Завершуємо - скидаємо стан і ховаємо overlay
             // Не відновлюємо pasteboard - залишаємо текст для можливості повторної вставки
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 DictationUIState.shared.forceReset()
                 OverlayWindow.shared.hide()
             }
@@ -118,15 +120,15 @@ final class TextInjector {
             return
         }
         
-        // Відправляємо події з невеликими затримками
+        // Відправляємо події з більшими затримками для надійності
         cmdDown.post(tap: .cghidEventTap)
-        usleep(10000) // 10ms
+        usleep(20000) // 20ms
         vDown.post(tap: .cghidEventTap)
-        usleep(10000) // 10ms
+        usleep(20000) // 20ms
         vUp.post(tap: .cghidEventTap)
-        usleep(10000) // 10ms
+        usleep(20000) // 20ms
         cmdUp.post(tap: .cghidEventTap)
         
-        print("[TextInjector] Paste simulated with delays")
+        print("[TextInjector] Paste simulated")
     }
 }

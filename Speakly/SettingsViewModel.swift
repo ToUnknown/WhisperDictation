@@ -9,6 +9,7 @@ import AppKit
 import Combine
 import Foundation
 import ServiceManagement
+import SwiftUI
 
 final class SettingsViewModel: ObservableObject {
     @Published var showSavedMessage: Bool = false
@@ -17,6 +18,15 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var maskedKey: String = ""
     @Published var launchAtLoginEnabled: Bool = false
     @Published var launchAtLoginErrorMessage: String? = nil
+    
+    // Translation settings
+    @AppStorage("autoTranslateEnabled") var autoTranslateEnabled: Bool = false
+    @AppStorage("hasSeenTranslationHint") private var hasSeenTranslationHint: Bool = false
+    
+    /// Returns the current keyboard language display name (e.g., "English", "Українська")
+    var keyboardLanguageDisplayName: String {
+        KeyboardLanguageProvider.currentLanguageDisplayName()
+    }
 
     private let store: APIKeyStore
     
@@ -58,6 +68,10 @@ final class SettingsViewModel: ObservableObject {
             updateLaunchAtLoginStatus()
             launchAtLoginErrorMessage = "Unable to update login item. Please try again."
         }
+    }
+
+    func resetPopovers() {
+        hasSeenTranslationHint = false
     }
 
     private func updateMaskedKey() {

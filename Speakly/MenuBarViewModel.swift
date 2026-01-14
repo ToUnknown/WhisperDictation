@@ -8,12 +8,20 @@
 import AppKit
 import Combine
 import Foundation
+import SwiftUI
 
 final class MenuBarViewModel: ObservableObject {
     @Published private(set) var hasValidKey: Bool
     @Published private(set) var availableDevices: [AudioInputDevice]
     @Published private(set) var selectedDeviceUID: String
     @Published private(set) var historyItems: [TranscriptionHistoryStore.Item]
+    
+    // Translation hint
+    @AppStorage("hasSeenTranslationHint") var hasSeenTranslationHint: Bool = false
+    
+    var shouldShowTranslationHint: Bool {
+        !hasSeenTranslationHint && hasValidKey
+    }
 
     private let apiKeyStore: APIKeyStore
     private let microphoneManager: MicrophoneManager
@@ -33,6 +41,10 @@ final class MenuBarViewModel: ObservableObject {
         self.historyItems = historyStore.items
 
         bindStores()
+    }
+    
+    func dismissTranslationHint() {
+        hasSeenTranslationHint = true
     }
 
     var selectedMicrophoneName: String {

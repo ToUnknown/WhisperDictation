@@ -17,56 +17,76 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Статус
+            // Status
             statusSection
-
+            
             Divider()
+                .padding(.bottom, 2)
+                .padding(.top, 6)
+        
+            // History
+            historySection
                 .padding(.vertical, 4)
-
-            // Вибір мікрофона
+            
+            Divider()
+                .padding(.bottom, 4)
+            
+            // Microphone selection
             microphoneSection
 
             Divider()
                 .padding(.vertical, 4)
 
-            // Історія
-            historySection
-
-            Divider()
-                .padding(.vertical, 4)
-
-            // Налаштування
+            // Translation hint (shown above Settings)
+            if viewModel.shouldShowTranslationHint {
+                TranslationHintBanner {
+                    viewModel.dismissTranslationHint()
+                }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 4)
+            }
+            
+            // Settings
             SettingsLink {
                 HStack {
-                    Text("Settings...")
+                    Image(systemName: "gear")
+                    Text("Settings")
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        
                     Spacer()
-                    Text("⌘,")
+                    Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 4)
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 10)
             .padding(.vertical, 4)
-
+            
             Divider()
                 .padding(.vertical, 4)
 
-            // Вихід
+            // Quit
             Button {
                 viewModel.quitApp()
             } label: {
                 HStack {
                     Text("Quit WhisperDictation")
                     Spacer()
-                    Text("⌘Q")
+                    Image(systemName: "xmark")
+                        .padding(.trailing, 12)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
+                    
                 }
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.leading, 12)
+            .padding(.top, 4)
+            .padding(.bottom, 2)
         }
         .frame(width: menuWidth)
         .padding(.vertical, 8)
@@ -81,6 +101,7 @@ struct MenuBarView: View {
             Circle()
                 .fill(viewModel.hasValidKey ? .green : .orange)
                 .frame(width: 8, height: 8)
+                .padding(.leading, 4)
 
             Text(viewModel.hasValidKey ? "Ready" : "API Key Required")
                 .font(.caption)
@@ -95,19 +116,25 @@ struct MenuBarView: View {
                 .background(Color.secondary.opacity(0.15))
                 .cornerRadius(4)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 12)
         .padding(.vertical, 4)
     }
 
     // MARK: - History Section
 
     private var historySection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("History")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .padding(.horizontal, 8)
-
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Image(systemName: "book.pages")
+                    .padding(.leading, 10)
+                    .padding(.bottom, 2)
+                    .font(.body)
+                Text("History")
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .padding(.bottom, 2)
+            }
+            
             if viewModel.historyItems.isEmpty {
                 Text("No transcriptions yet")
                     .font(.caption)
@@ -121,7 +148,6 @@ struct MenuBarView: View {
                 }
             }
         }
-        .padding(.vertical, 4)
     }
 
     // MARK: - Microphone Section
@@ -157,14 +183,16 @@ struct MenuBarView: View {
                 Text(viewModel.selectedMicrophoneName)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .padding(.leading, 2)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .padding(.trailing, 4)
             }
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 4)
     }
 }
@@ -174,37 +202,63 @@ private struct HistoryRowView: View {
     let copyAction: () -> Void
     @State private var isHovered = false
 
-    private let copyButtonWidth: CGFloat = 28
-
     var body: some View {
         Button(action: copyAction) {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 Text(item.text)
                     .font(.caption)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Always reserve space for the copy button
                 Image(systemName: "doc.on.doc")
-                    .font(.system(size: 10))
-                    .frame(width: copyButtonWidth, height: 20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.accentColor.opacity(isHovered ? 1 : 0))
-                    )
-                    .foregroundColor(isHovered ? .white : .clear)
+                    .font(.system(size: 9))
+                    .foregroundColor(isHovered ? .primary : .clear)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 1)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovered = hovering
-            }
+            isHovered = hovering
         }
+    }
+}
+
+// MARK: - Translation Hint Banner
+
+private struct TranslationHintBanner: View {
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "globe")
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                Text("Auto Translation Available")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                Spacer()
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            
+            Text("Enable in Settings to translate speech to your keyboard language.")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(8)
+        .background(Color.blue.opacity(0.1))
+        .cornerRadius(6)
     }
 }
 

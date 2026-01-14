@@ -5,8 +5,8 @@
 //  Клієнт для OpenAI Whisper API.
 //
 
-import Foundation
 import Carbon
+import Foundation
 
 final class WhisperClient {
     static let shared = WhisperClient()
@@ -26,10 +26,17 @@ final class WhisperClient {
     func transcribeFile(at url: URL, completion: @escaping (Result<String, Error>) -> Void) {
         print("[WhisperClient] Starting transcription for file: \(url.path)")
         
+        // Check if auto-translation is enabled
+        let autoTranslateEnabled = UserDefaults.standard.bool(forKey: "autoTranslateEnabled")
+        
         // Отримуємо мову з системної клавіатури
-        let keyboardLanguage = getCurrentKeyboardLanguage()
+        let keyboardLanguage = KeyboardLanguageProvider.currentLanguageCode()
         let whisperLanguage = keyboardToWhisperLanguage[keyboardLanguage] ?? "en"
         print("[WhisperClient] Keyboard language: \(keyboardLanguage) → Whisper language: \(whisperLanguage)")
+
+        let targetLanguageCode = keyboardLanguage
+        let targetLanguageName = Locale.current.localizedString(forLanguageCode: targetLanguageCode) ?? targetLanguageCode
+        print("[WhisperClient] Target language: \(targetLanguageCode) (\(targetLanguageName)), Auto-translate: \(autoTranslateEnabled)")
         
         // Перевіряємо API ключ
         guard let apiKey = APIKeyStore.shared.apiKey, !apiKey.isEmpty else {
@@ -69,11 +76,26 @@ final class WhisperClient {
         // Поле model
         body.appendFormField(named: "model", value: "gpt-4o-transcribe", boundary: boundary)
         
-        // Поле language - мова з клавіатури
-        body.appendFormField(named: "language", value: whisperLanguage, boundary: boundary)
-        
-        // Prompt для точної транскрипції без пропусків
-        let prompt = "Transcribe the audio exactly as spoken, word for word. Include every sentence, phrase, and word without omitting, summarizing, or paraphrasing anything. Preserve all repetitions, filler words, and pauses."
+        // Build prompt and set language based on translation setting
+        let prompt: String
+        if autoTranslateEnabled {
+            // For translation, let the model detect the spoken language and output in the target language.
+            prompt = """
+            OUTPUT LANGUAGE: \(targetLanguageName) ONLY.
+            
+            CRITICAL INSTRUCTION: You MUST output ONLY in \(targetLanguageName). Regardless of what language is spoken in the audio, your output MUST be entirely in \(targetLanguageName).
+            
+            If the audio is in a different language, translate it to \(targetLanguageName).
+            If the audio is already in \(targetLanguageName), transcribe it directly.
+            
+            Do NOT include any text in the original language. Output ONLY the \(targetLanguageName) version.
+            """
+            print("[WhisperClient] Translation enabled - target language: \(targetLanguageName) (\(targetLanguageCode))")
+        } else {
+            // Normal transcription - use keyboard language
+            body.appendFormField(named: "language", value: whisperLanguage, boundary: boundary)
+            prompt = "Transcribe the audio exactly as spoken, word for word. Include every sentence, phrase, and word without omitting, summarizing, or paraphrasing anything. Preserve all repetitions, filler words, and pauses."
+        }
         body.appendFormField(named: "prompt", value: prompt, boundary: boundary)
         
         // Поле file
@@ -144,12 +166,13 @@ final class WhisperClient {
             do {
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let text = json["text"] as? String {
-                    print("[WhisperClient] Transcription successful: \(text.prefix(100))\(text.count > 100 ? "..." : "")")
+                    print("[WhisperClient] Transcription successful (\(text.count) chars)")
+                    print("[WhisperClient] Full transcription: \(text)")
                     completion(.success(text))
                 } else {
                     // Можливо простий текст без JSON
                     if let text = String(data: data, encoding: .utf8), !text.isEmpty {
-                        print("[WhisperClient] Transcription (plain text): \(text.prefix(100))\(text.count > 100 ? "..." : "")")
+                        print("[WhisperClient] Transcription (plain text, \(text.count) chars): \(text)")
                         completion(.success(text))
                     } else {
                         print("[WhisperClient] ERROR: Invalid response format")
@@ -172,48 +195,6 @@ final class WhisperClient {
     }
     
     // MARK: - Private Methods
-    
-    /// Отримує поточну мову клавіатури з системи
-    /// TIS* APIs are not thread-safe and must be called on the main thread
-    private func getCurrentKeyboardLanguage() -> String {
-        // TIS* APIs must be called on the main thread
-        if Thread.isMainThread {
-            return fetchKeyboardLanguageUnsafe()
-        } else {
-            var result = "en"
-            DispatchQueue.main.sync {
-                result = fetchKeyboardLanguageUnsafe()
-            }
-            return result
-        }
-    }
-    
-    /// Internal method that actually calls TIS* APIs - must only be called on main thread
-    private func fetchKeyboardLanguageUnsafe() -> String {
-        guard let inputSource = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
-            print("[WhisperClient] Could not get keyboard input source, defaulting to 'en'")
-            return "en"
-        }
-        
-        // Отримуємо властивість мов через Unmanaged
-        guard let rawPtr = TISGetInputSourceProperty(inputSource, kTISPropertyInputSourceLanguages) else {
-            print("[WhisperClient] Could not get languages from input source, defaulting to 'en'")
-            return "en"
-        }
-        
-        // Конвертуємо в CFArray
-        let languagesArray = Unmanaged<CFArray>.fromOpaque(rawPtr).takeUnretainedValue()
-        
-        guard let languages = languagesArray as? [String], let primaryLanguage = languages.first else {
-            print("[WhisperClient] Could not parse languages array, defaulting to 'en'")
-            return "en"
-        }
-        
-        // Беремо перші 2 символи (код мови), наприклад "uk" з "uk-UA"
-        let languageCode = String(primaryLanguage.prefix(2))
-        print("[WhisperClient] Detected keyboard language: \(primaryLanguage) → \(languageCode)")
-        return languageCode
-    }
     
     private func getMimeType(for url: URL) -> String {
         let ext = url.pathExtension.lowercased()
@@ -251,6 +232,44 @@ private extension Data {
         append("--\(boundary)\r\n".data(using: .utf8)!)
         append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
         append("\(value)\r\n".data(using: .utf8)!)
+    }
+}
+
+// MARK: - Keyboard Language Provider
+
+enum KeyboardLanguageProvider {
+    static func currentLanguageCode() -> String {
+        if Thread.isMainThread {
+            return fetchLanguageCode()
+        }
+        
+        var result = "en"
+        DispatchQueue.main.sync {
+            result = fetchLanguageCode()
+        }
+        return result
+    }
+    
+    static func currentLanguageDisplayName(locale: Locale = .current) -> String {
+        let code = currentLanguageCode()
+        return locale.localizedString(forLanguageCode: code) ?? code
+    }
+    
+    private static func fetchLanguageCode() -> String {
+        guard let inputSource = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
+            return "en"
+        }
+        
+        guard let rawPtr = TISGetInputSourceProperty(inputSource, kTISPropertyInputSourceLanguages) else {
+            return "en"
+        }
+        
+        let languagesArray = Unmanaged<CFArray>.fromOpaque(rawPtr).takeUnretainedValue()
+        guard let languages = languagesArray as? [String], let primaryLanguage = languages.first else {
+            return "en"
+        }
+        
+        return String(primaryLanguage.prefix(2))
     }
 }
 

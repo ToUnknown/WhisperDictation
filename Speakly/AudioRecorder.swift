@@ -582,7 +582,8 @@ final class AudioRecorder {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let text):
-                    print("[AudioRecorder] Transcription: \(text)")
+                    print("[AudioRecorder] Transcription received (\(text.count) chars)")
+                    print("[AudioRecorder] Full transcription: \(text)")
                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         TranscriptionHistoryStore.shared.add(text: text)
                         TextInjector.shared.insert(text: text)
