@@ -1,72 +1,92 @@
 <div align="center">
-  <table>
-    <tr>
-      <td>
-        <img src="docs/assets/Icon.png" style="width: 84px; height: 84px;" alt="Speakly icon" />
-      </td>
-      <td>
-        <div style="font-size: 36px; font-weight: 700; line-height: 1; margin-left: 8px;">Speakly</div>
-      </td>
-    </tr>
-  </table>
+  <img src="docs/assets/Icon.png" width="140" alt="Speakly icon" />
+  
+  # Speakly
+  
+  **Voice to text, instantly.**
+  
+  <p>
+    <img src="https://img.shields.io/badge/macOS-26+-007AFF?style=plastic&logo=apple&logoColor=white" alt="macOS 14+" />
+    <img src="https://img.shields.io/badge/Swift-5-F05138?style=plastic&logo=swift&logoColor=white" alt="Swift 5" />
+    <img src="https://img.shields.io/badge/GPT--4o_Transcribe-OpenAI-412991?style=plastic&logo=openai&logoColor=white" alt="OpenAI GPT-4o Transcribe" />
+  </p>
+  
+  <p>
+    <em>Tired of breaking your flow to type every quick thought?</em><br/>
+    <strong>Speakly lives in your menu bar and turns voice into clean text on demand.</strong>
+  </p>
+
 </div>
 
-<p align="center">
-  You're tired of breaking your flow to type every quick thought, so Speakly lives in your menu bar and turns voice into clean text on demand.
-</p>
+## Features
+
+- **Instant Transcription** — Hold the right Option(⌥) key to dictate, release to transcribe
+- **Reliable accuracy** — Powered by OpenAI's GPT-4o Transcribe model for accurate results
+- **Auto-translation** — Automatically translate to your current keyboard language (can be enabled in settings)
+- **History** — Quick access to recent transcriptions, click to copy
+- **Secure** — API key stored safely in macOS Keychain
+- **Launch at login** — Always ready when you need it (can be enabled in settings)
+
+<br/>
+
+## Configuration & Preferences
+
+<img src="docs/assets/menuBar-view.png" width="340" align="right" alt="Menu Bar View" style="border-radius: 12px; margin-left: 24px; margin-bottom: 16px;" />
+
+### Menu Bar Control
+
+The menu bar popup is your command center for everything Speakly does. At a glance, you can see whether your API key is configured and ready to go, so there's no guessing before you start a recording session.
+
+Below the status indicator, you'll find your transcription history — a list of your recent dictations. Each entry is just a click away from being copied to your clipboard, which means you can grab previous transcriptions without digging through notes or documents.
+
+Need to switch microphones? The device picker is right there. Plug in a new USB mic or pair your AirPods, hit refresh, and select the input you want. Everything stays in one place so you never have to leave your current workflow.
+
+<br clear="all" />
+
+---
+
+<img src="docs/assets/settings-view.png" width="340" align="right" alt="Settings View" style="border-radius: 12px; margin-left: 24px; margin-bottom: 16px;" />
+
+### Settings
+
+The settings panel keeps configuration simple and secure. Your OpenAI API key is stored in the macOS Keychain, not in plain text, so you can paste it once and forget about it. A quick status indicator confirms when the key is saved and valid.
+
+Toggle on automatic translation if you work across languages. Speakly translates your dictation into whichever language your keyboard is currently set to — perfect for multilingual workflows or when you need to draft messages in a different language than you think in.
+
+Finally, enable launch at login so Speakly is ready the moment your Mac boots up. No extra clicks, no hunting through Applications — just press the right Option key and start talking.
+
+<br clear="all" />
 
 ## Built With
 
-- Swift and SwiftUI for the macOS UI and menu bar experience
-- AppKit for menu bar integration and window control
-- OpenAI Audio Transcriptions API (model: `gpt-4o-transcribe`)
-- AVFoundation + CoreAudio for microphone capture and audio processing
-- Accelerate for audio analysis
-- Combine for state and reactive updates
-- Security (Keychain Services) for storing the API key
-- CoreGraphics + ApplicationServices for system-level input and text injection
-- ServiceManagement for launch-at-login support
-- URLSession for network requests
+| Category          | Technology                                           |
+| ----------------- | ---------------------------------------------------- |
+| **UI**            | SwiftUI, AppKit                                      |
+| **Audio**         | AVFoundation, CoreAudio, Accelerate                  |
+| **Transcription** | OpenAI GPT-4o Transcribe                             |
+| **State**         | Combine                                              |
+| **Security**      | Keychain Services                                    |
+| **System**        | CoreGraphics, ApplicationServices, ServiceManagement |
 
-## What is the 4o Transcribe Model by OpenAI?
+<br/>
 
-GPT-4o Transcribe (sometimes called the 4o Transcribe model) is OpenAI's speech-to-text model powered by GPT-4o. It is designed for accurate transcription and improves word error rate and language recognition compared to the original Whisper models. Speakly uses this model to turn your recorded audio into precise, ready-to-paste text.
+## How It Works
 
-## Screens
+Speakly uses OpenAI's GPT-4o Transcribe model for speech-to-text. The model automatically detects your spoken language and produces accurate transcriptions. With translation enabled, it can also convert your speech into your current keyboard language.
 
-<table>
-  <tr>
-    <td width="70%" valign="top">
-      <h3>Menu Bar Control</h3>
-      <p>
-        Check your status at a glance and see whether your API key is ready before you start. The
-        history list keeps your last transcriptions close, so you can click any line to copy it
-        instantly without hunting for it in another app. You can also pick the active microphone,
-        refresh devices if something changes, and jump straight into Settings without leaving your
-        current workflow.
-      </p>
-    </td>
-    <td width="30%" align="right">
-        <img src="docs/assets/menuBar-view.png" width="400" style="border-radius: 18px;" alt="Speakly menu bar view" />
-    </td>
-  </tr>
-</table>
+<br/>
 
-<br />
+## Getting Started
 
-<table>
-  <tr>
-    <td width="70%" valign="top">
-      <h3>Settings</h3>
-      <p>
-        Paste your OpenAI API key, confirm it’s saved, and keep it in one place without leaving
-        the app. Toggle translation so your spoken audio can automatically land in your current
-        keyboard language, then enable launch at login so Speakly is ready the moment you sit down.
-        If you want the onboarding tips again, reset the popovers for a clean slate.
-      </p>
-    </td>
-    <td width="30%" align="right">
-        <img src="docs/assets/settings-view.png" width="400" style="border-radius: 14px;" alt="Speakly settings view" />
-    </td>
-  </tr>
-</table>
+1. Download the latest release or build from source
+2. Move `Speakly.app` to your Applications folder
+3. Launch Speakly — it appears in your menu bar
+4. Open Settings and paste your [OpenAI API key](https://platform.openai.com/api-keys)
+5. Start speaking!
+
+<br/><br/>
+
+<div align="center">
+  <br/>
+  <sub>Made for people who think faster than they type.</sub>
+</div>
